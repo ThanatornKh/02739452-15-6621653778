@@ -19,35 +19,24 @@ MONTHS_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "
              "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
 
 
-def line_chart(df, series, scale, y_title, height, split=False, point_size=45, focus_day=None):
+def line_chart(df, series, scale, y_title, height, split=False, points=False, focus_day=None):
     """กราฟเส้น: กด legend เพื่อเลือกดูทีละเส้น (Shift + คลิก เลือกหลายเส้น), ลาก/ซูมได้
-    ทุกจุดข้อมูลเป็นวงกลม และ hover จะดูดเข้าหาจุดที่ใกล้ที่สุดเอง (ไม่ต้องเล็งให้โดนจุด)
     split=True แยกเป็นกราฟย่อยละ 1 เส้น, focus_day = วันที่ค้นหา (เส้นประ + จุดของวันนั้น)"""
 
     def build(d, h, with_legend_select):
         sel = alt.selection_point(fields=[series], bind="legend")
-        hover = alt.selection_point(fields=["rate_date", series], nearest=True,
-                                    on="pointerover", clear="pointerout", empty=False)
         base = alt.Chart(d).encode(
             x=alt.X("rate_date:T", title="วันที่"),
             y=alt.Y("value:Q", title=y_title, scale=alt.Scale(zero=False)),
             color=alt.Color(f"{series}:N", title="", scale=scale),
-        )
-        faded = alt.condition(sel, alt.value(1), alt.value(0.08)) if with_legend_select else alt.value(1)
-        line = base.mark_line(strokeWidth=1.8).encode(opacity=faded)
-        if with_legend_select:
-            line = line.add_params(sel)
-        dots = base.mark_circle(stroke="white", strokeWidth=0).encode(
-            size=alt.condition(hover, alt.value(point_size * 5), alt.value(point_size)),
-            strokeWidth=alt.condition(hover, alt.value(2), alt.value(0)),
-            opacity=faded,
-            tooltip=[alt.Tooltip("rate_date:T", title="วันที่", format="%d %b %Y"),
+            tooltip=[alt.Tooltip("rate_date:T", title="วันที่"),
                      alt.Tooltip(f"{series}:N", title="ชุด"),
                      alt.Tooltip("thb:Q", title="บาท", format=",.4f")],
-        ).add_params(hover)
-        guide = alt.Chart(d).mark_rule(color="#8a8a8a", strokeWidth=1).encode(
-            x="rate_date:T").transform_filter(hover)
-        layers = [line.interactive(), guide, dots]
+        )
+        line = base.mark_line(strokeWidth=1.8, point=points)
+        if with_legend_select:
+            line = line.encode(opacity=alt.condition(sel, alt.value(1), alt.value(0.08))).add_params(sel)
+        layers = [line.interactive()]
         if focus_day is not None:
             ts = pd.Timestamp(focus_day)
             rule = alt.Chart(pd.DataFrame({"rate_date": [ts]})).mark_rule(
@@ -221,11 +210,10 @@ else:
         y_title = "บาท"
     st.altair_chart(
         line_chart(chart_df, "unit", QUOTE_COLORS, y_title, 380, split=split_trend,
-                   point_size=40, focus_day=focus_day),
+                   points=focus_day is not None, focus_day=focus_day),
         use_container_width=True, theme=None,
     )
-    st.caption("ชี้เมาส์ใกล้จุดไหนก็ได้ ระบบจะเลือกจุดที่ใกล้ที่สุดและแสดงค่าให้ · "
-               "กดชื่อในคำอธิบายสีเพื่อแยกดูทีละเส้น (Shift + คลิก เลือกหลายเส้น, คลิกที่ว่างเพื่อแสดงทั้งหมด) · "
+    st.caption("กดชื่อในคำอธิบายสีเพื่อแยกดูทีละเส้น (Shift + คลิก เลือกหลายเส้น, คลิกที่ว่างเพื่อแสดงทั้งหมด) · "
                "ลากเพื่อเลื่อน · scroll เพื่อซูม · ดับเบิลคลิกเพื่อรีเซ็ต")
 
     if focus_day is not None:
@@ -266,7 +254,7 @@ else:
     raw["value"] = raw["thb"]
     st.altair_chart(
         line_chart(raw, "source", SOURCE_COLORS, f"บาทต่อ {unit_label(q_cmp)}", 300,
-                   split=split_src, point_size=80, focus_day=focus_day),
+                   split=split_src, points=True, focus_day=focus_day),
         use_container_width=True, theme=None,
     )
     st.caption(("ช่วงที่ค้นหา" if focus_label else "60 วันล่าสุดของช่วงที่เลือก")
