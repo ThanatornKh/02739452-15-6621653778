@@ -25,6 +25,18 @@ html, body, [class*="css"], .stApp, .stMarkdown, p, label, input, textarea, butt
 [data-testid="stDecoration"], [data-testid="stToolbar"] {{ display: none; }}
 [data-testid="stHeader"] {{ background: transparent; }}
 .block-container {{ padding-top: 2.5rem; max-width: 1280px; }}
+/* สวิตช์ธีมมุมขวาบน */
+[data-testid="stHorizontalBlock"]:has(#kx-theme-anchor) {{ margin-bottom: -1.6rem; }}
+[data-testid="stColumn"]:has(#kx-theme-anchor) [data-testid="stVerticalBlock"] {{
+    align-items: flex-end; gap: 0;
+}}
+[data-testid="stColumn"]:has(#kx-theme-anchor) [data-testid="stElementContainer"]:has(#kx-theme-anchor) {{
+    display: none;
+}}
+[data-testid="stColumn"]:has(#kx-theme-anchor) label p {{
+    text-transform: uppercase; letter-spacing: .16em; font-size: .72rem !important;
+    white-space: nowrap;
+}}
 
 /* sidebar */
 [data-testid="stSidebar"] {{ background: {panel}; border-right: 1px solid {line}; }}
@@ -159,15 +171,19 @@ def theme_mode() -> str:
 
 
 def theme_toggle() -> str:
-    """สวิตช์ธีมขาว/ดำที่ sidebar — เก็บโหมดใน session_state คีย์ธรรมดา (ไม่ใช่คีย์ของ widget)
+    """สวิตช์ธีมขาว/ดำที่มุมขวาบนของหน้า — เก็บโหมดใน session_state คีย์ธรรมดา (ไม่ใช่คีย์ของ widget)
     เพราะ Streamlit ล้างค่า widget ทิ้งเมื่อเปลี่ยนหน้า ธีมจะได้คงเดิมทุกหน้า"""
     st.session_state.setdefault("kx_mode", "dark")
 
     def _flip():
         st.session_state["kx_mode"] = "light" if st.session_state["_kx_light"] else "dark"
 
-    st.sidebar.toggle("Light theme", value=st.session_state["kx_mode"] == "light",
-                      key="_kx_light", on_change=_flip)
+    _, right = st.columns([5, 1])
+    with right:
+        # anchor ให้ CSS หาคอลัมน์นี้เจอ แล้วชิดขวา
+        st.markdown('<span id="kx-theme-anchor"></span>', unsafe_allow_html=True)
+        st.toggle("Light theme", value=st.session_state["kx_mode"] == "light",
+                  key="_kx_light", on_change=_flip)
     return st.session_state["kx_mode"]
 
 
