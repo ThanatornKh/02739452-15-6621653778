@@ -54,7 +54,7 @@
     <tr><td>1 ขั้นต่ำ</td><td>DAG แบบ extract → transform → load ลง PostgreSQL และเว็บ Streamlit แสดงตารางและกราฟเส้น โดยอ่านจาก PostgreSQL ตรงด้วย psycopg2</td><td class="ok">ครบ</td></tr>
     <tr><td>2 มาตรฐาน</td><td>3 แหล่งรันขนานกันใน TaskGroup <code>frankfurter</code> / <code>yahoo</code> / <code>xrates</code> แปลงทุกแหล่งให้อยู่ใน schema เดียวกัน (<code>fx_rates_raw</code>) ใช้ <code>INSERT … ON CONFLICT DO UPDATE</code> โดย PK = (source, date, base, quote) รันซ้ำ 4 รอบแล้วจำนวนแถวยังคง 11,748 แถวเท่าเดิม เว็บมี KPI 8 ตัว และตัวกรองสกุล, ช่วงเวลา และจำนวนแหล่งที่ยืนยัน</td><td class="ok">ครบ</td></tr>
     <tr><td>3 ท้าทาย</td><td>แหล่งที่ 3 เป็น <b>web scraping</b> จาก x-rates.com (requests + BeautifulSoup ไม่ใช้ Selenium) ส่วน <code>merge_dedup</code> ตั้ง <code>trigger_rule=all_done</code> จึงรวมข้อมูลจากแหล่งที่เหลือได้เมื่อมีแหล่งล่ม (ทดสอบด้วย <code>simulate_down=yahoo</code> แล้ว DAG ยัง success สถานะเป็น PARTIAL ดู Grid view ในภาพที่ 4) ตัดรายการซ้ำข้ามแหล่งด้วย GROUP BY (วัน, สกุล) ใช้ค่ามัธยฐาน ทำให้ 11,748 แถวเหลือ 6,228 แถว จากนั้น <code>quality_check</code> (@task.branch) ตรวจ 5 ข้อ ถ้าผ่านไป <code>publish</code> ถ้าไม่ผ่านไป <code>quarantine</code></td><td class="ok">ครบ</td></tr>
-    <tr><td>โบนัส</td><td>มีหน้า <b>Pipeline Status</b> บนเว็บ (สถานะรายรอบ, รายแหล่ง, ผล DQ) และใช้ <b>Dynamic Task Mapping</b> กับ <code>scrape_day.expand()</code> (22 วัน)</td><td class="ok">ครบ</td></tr>
+    <tr><td>โบนัส</td><td>มีหน้า <b>Pipeline Status</b> บนเว็บ (สถานะรายรอบ, รายแหล่ง, ผล DQ) และใช้ <b>Dynamic Task Mapping</b> กับ <code>scrape_day.expand()</code> (22 วัน) · เพิ่มเติม: หน้า <b>Today</b> สรุปเรตล่าสุดและกราฟถูก/แพงกว่าค่าเฉลี่ย 90 วัน, <b>ค้นหาปี/เดือน/วัน</b> แล้วกราฟ zoom ไปที่ช่วงนั้น (ค้นผ่านลิงก์ <code>?year=&amp;month=&amp;day=</code> ได้), กด legend เพื่อแยกดูทีละเส้น และสลับธีมดำ/ขาวได้</td><td class="ok">ครบ</td></tr>
   </table>
   <p><b>แหล่งข้อมูล:</b> (1) Frankfurter API ข้อมูล ECB 6,148 แถว · (2) Yahoo Finance chart JSON 5,512 แถว · (3) x-rates.com scrape 30 วันล่าสุด 88 แถว
      รวมข้อมูลดิบ 11,748 แถว และหลังตัดซ้ำเหลือ <b>6,228 แถว</b> (เกณฑ์ขั้นต่ำ 100 แถว)
@@ -91,7 +91,7 @@
     <p><span class="tag">ปัญหา 3</span> <b>ธีมขาวแสดงผลเพี้ยน: พื้นขาวแต่ตัวหนังสือขาว ส่วนกราฟและช่องเลือกยังเป็นสีดำ</b></p>
     <p><b>อาการ:</b> กด Light theme แล้ว CSS ที่เขียนเองเปลี่ยนเป็นพื้นขาว แต่ label เป็นตัวอักษรขาวจนมองไม่เห็น ส่วนกราฟ, multiselect และตารางยังเป็นธีมมืด และผลบนเบราว์เซอร์แต่ละเครื่องไม่เหมือนกัน</p>
     <p><b>หาสาเหตุ:</b> เทียบผลระหว่างหน้าต่างเก่าที่เปิดค้างไว้กับ session ใหม่ แล้ว inspect DOM ของ widget พบว่าวิธีแรกไปแก้ <code>theme.*</code> ฝั่ง server ซึ่งใช้ร่วมกันทุกหน้าต่าง Streamlit ส่งค่าธีมให้หน้าเว็บเฉพาะตอนเริ่ม session และเบราว์เซอร์ยังจำธีมเดิมไว้ ธีมจึงไม่ตรงกันระหว่าง CSS กับ widget</p>
-    <p><b>วิธีแก้:</b> เลิกแก้ธีมฝั่ง server แล้วเก็บโหมดใน <code>st.session_state</code> แยกต่อหน้าต่าง ทำธีมขาวด้วย CSS ที่ระบุ selector ของ widget โดยตรง (select, radio, toggle) ตั้งค่ากราฟ Altair เองด้วย <code>theme=None</code> และ <code>configure_axis</code> ตามโหมด และล็อกสีเส้นแต่ละสกุลด้วย <code>alt.Scale(domain, range)</code> ให้สีเส้นเหมือนเดิมทั้งสองธีม</p>
+    <p><b>วิธีแก้:</b> เลิกแก้ธีมฝั่ง server แล้วเก็บโหมดใน <code>st.session_state</code> แยกต่อหน้าต่าง ทำธีมขาวด้วย CSS ที่ระบุ selector ของ widget โดยตรง (select, radio, toggle) ตั้งค่ากราฟ Altair เองด้วย <code>theme=None</code> และ <code>configure_axis</code> ตามโหมด และล็อกสีเส้นแต่ละสกุลด้วย <code>alt.Scale(domain, range)</code> ให้สีเส้นเหมือนเดิมทั้งสองธีม นอกจากนี้ตอนเปลี่ยนหน้าธีมเด้งกลับเป็นดำ เพราะ Streamlit ล้างค่า widget ที่ไม่อยู่ในหน้าใหม่ จึงย้ายไปเก็บโหมดในคีย์ธรรมดาของ session_state แล้วใช้ <code>on_change</code> อัปเดตแทน</p>
   </div>
 </div>
 
@@ -105,8 +105,8 @@
     <tr><td>13:20–13:25</td><td><code>docker-compose.yml</code> (LocalExecutor), <code>.env.example</code>, <code>.gitignore</code> และ DAG ครบ 3 แหล่ง (TaskGroup, UPSERT, dedup, branch, mapping)</td><td>ออกแบบโครงระดับ 3 ไว้ตั้งแต่แรก จะได้ไม่ต้องรื้อทีหลัง</td></tr>
     <tr><td>13:25–13:30</td><td>Dashboard ตัวแรก รันระบบจริง แล้ว <b>commit + push ครั้งแรก</b></td><td>มีงานที่ส่งได้แล้วตั้งแต่ช่วงต้น</td></tr>
     <tr><td>13:30–13:35</td><td>แก้ปัญหา Yahoo (ปัญหา 1) ทดสอบ simulate_down และรันซ้ำเพื่อตรวจ UPSERT แล้วเขียน README</td><td>พิสูจน์ระดับ 2–3 ด้วยผลรันจริง</td></tr>
-    <tr><td>13:35–13:45</td><td>ปรับดีไซน์ dashboard (โทนมินิมอล ดำ/ขาว), หน้า Pipeline Status, สวิตช์ธีม และจัดแท็กตัวกรองให้กว้างเท่ากัน</td><td>ทำโบนัสหลังงานหลักเสร็จแล้ว</td></tr>
-    <tr><td>13:45–14:15</td><td>ถ่ายภาพ Graph/Grid/Dashboard แล้วทำไฟล์ PDF สรุป</td><td>35 คะแนนของ PDF</td></tr>
+    <tr><td>13:35–13:55</td><td>ปรับดีไซน์ dashboard (โทนมินิมอล ดำ/ขาว), หน้า Pipeline Status, สวิตช์ธีม, แท็กตัวกรองกว้างเท่ากัน, หน้า Today, ค้นหาปี/เดือน/วันพร้อม zoom กราฟ และแยกเส้นกราฟ</td><td>ทำโบนัสหลังงานหลักเสร็จแล้ว</td></tr>
+    <tr><td>13:55–14:15</td><td>ถ่ายภาพ Graph/Grid/Dashboard แล้วทำไฟล์ PDF สรุป</td><td>35 คะแนนของ PDF</td></tr>
     <tr><td>14:15–16:00</td><td>ทดสอบ clone repo ใหม่ลงโฟลเดอร์ว่างแล้วรันตาม README, ตรวจว่าไม่มีรหัสผ่านใน git, commit สุดท้าย และส่งงาน</td><td>เวลาสำรอง กันกรณีอาจารย์รันไม่ได้</td></tr>
   </table>
 

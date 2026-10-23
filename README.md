@@ -55,6 +55,18 @@ create_tables ──┼─ TaskGroup yahoo:       extract → transform → load
   - `quality_check` เป็น `@task.branch` ตรวจ 5 ข้อ ได้แก่ จำนวนแถว, เรตที่ใช้ไม่ได้, มีครบทุกสกุล, ความสดของข้อมูล และความต่างระหว่างแหล่ง ถ้าผ่านไป `publish` ถ้าไม่ผ่านไป `quarantine`
 - **โบนัส:** มีหน้า Pipeline Status บนเว็บ และใช้ Dynamic Task Mapping (`scrape_day.expand`)
 
+### Dashboard (http://localhost:8501)
+| หน้า | สิ่งที่มี |
+|---|---|
+| **Dashboard** | KPI, ตัวกรอง (สกุล / ช่วงเวลา / จำนวนแหล่งที่ยืนยัน), กราฟแนวโน้ม, กราฟเทียบรายแหล่ง และตารางข้อมูลพร้อมดาวน์โหลด CSV |
+| **Today** | สรุปเรตล่าสุดของวันนี้ ได้แก่ การเปลี่ยนแปลงจากวันก่อนและ 7 วันก่อน, กรอบราคา 30 วัน, ค่าจากแต่ละแหล่ง และกราฟเทียบค่าเฉลี่ย 90 วัน / กรอบราคา 1 ปี ว่าสกุลไหนถูกหรือแพงกว่าปกติ (สรุปเชิงสถิติ ไม่ใช่คำแนะนำทางการเงิน) |
+| **Pipeline Status** | สถานะแต่ละรอบ แต่ละแหล่ง ผลตรวจคุณภาพ และแถวที่ถูก quarantine |
+
+- **ค้นหาปี / เดือน / วัน** (sidebar → Search) กราฟจะ zoom ไปที่ช่วงนั้น ถ้าเลือกถึงระดับวัน จะแสดงเส้นประตรงวันที่เลือกและค่าของวันนั้น ค้นหาผ่านลิงก์ได้ด้วย เช่น http://localhost:8501/?year=2024&month=8&day=5
+- **แยกดูทีละเส้น:** กดชื่อใน legend ของกราฟ (Shift + คลิก เพื่อเลือกหลายเส้น) หรือเปิดสวิตช์ "แยกเส้นเป็นกราฟย่อย"
+- กราฟลากเพื่อเลื่อน และ scroll เพื่อซูมได้
+- สลับธีมดำ / ขาวได้ที่สวิตช์ Light theme โดยธีมจะคงเดิมเมื่อเปลี่ยนหน้า
+
 ## วิธีรัน
 
 ต้องมี Docker Desktop (แนะนำ RAM อย่างน้อย 4 GB) และพอร์ต 8090, 8501, 5435 ต้องว่าง
@@ -89,8 +101,10 @@ SELECT * FROM pipeline_runs ORDER BY finished_at DESC;
 
 ```
 dags/fx_multi_source_dag.py   DAG หลัก (3 แหล่ง, TaskGroup, UPSERT, dedup, branch, mapping)
-web/Dashboard.py              Dashboard: KPI, ตัวกรอง, กราฟ, ตาราง
+web/Dashboard.py              Dashboard: KPI, ตัวกรอง, ค้นหา ปี/เดือน/วัน, กราฟ, ตาราง
+web/pages/0_Today.py          สรุปข้อมูลล่าสุดของวันนี้ + ถูก/แพงกว่าปกติ
 web/pages/1_Pipeline_Status.py หน้าสถานะ pipeline
+web/style.py                  ธีม (ดำ/ขาว) และส่วนประกอบหน้าเว็บ
 web/db.py                     เชื่อม PostgreSQL ตรงด้วย psycopg2
 docker-compose.yml            Airflow (LocalExecutor) + PostgreSQL x2 + web
 Dockerfile, requirements.txt  image ของ Airflow + แพ็กเกจที่ DAG ใช้
