@@ -89,7 +89,7 @@ SELECT * FROM pipeline_runs ORDER BY finished_at DESC;
 
 ```
 dags/fx_multi_source_dag.py   DAG หลัก (3 แหล่ง, TaskGroup, UPSERT, dedup, branch, mapping)
-web/app.py                    Dashboard: KPI, ตัวกรอง, กราฟ, ตาราง
+web/Dashboard.py              Dashboard: KPI, ตัวกรอง, กราฟ, ตาราง
 web/pages/1_Pipeline_Status.py หน้าสถานะ pipeline
 web/db.py                     เชื่อม PostgreSQL ตรงด้วย psycopg2
 docker-compose.yml            Airflow (LocalExecutor) + PostgreSQL x2 + web

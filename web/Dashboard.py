@@ -7,13 +7,21 @@ import pandas as pd
 import streamlit as st
 
 from db import QUOTE_INFO, query, thb_per_unit, unit_label
+from style import apply_style, hero, section
 
-st.set_page_config(page_title="FX Multi-Source Dashboard", page_icon="💱", layout="wide")
+# ล็อกสีของแต่ละเส้นให้เหมือนเดิมเสมอ ไม่ขึ้นกับธีม/ลำดับข้อมูล
+QUOTE_COLORS = alt.Scale(domain=["1 EUR", "1 USD", "1,000 KRW", "100 JPY"],
+                         range=["#0068c9", "#83c9ff", "#ff2b2b", "#ffabab"])
+SOURCE_COLORS = alt.Scale(domain=["frankfurter", "xrates", "yahoo"],
+                          range=["#0068c9", "#83c9ff", "#ff2b2b"])
 
-st.title("💱 ค่าเงินบาทเทียบ JPY / USD / EUR / KRW")
-st.caption(
-    "รวมจาก 3 แหล่ง: Frankfurter API (ECB) · Yahoo Finance · x-rates.com (web scraping) "
-    "— ประมวลผลด้วย Apache Airflow แล้วอ่านตรงจาก PostgreSQL"
+st.set_page_config(page_title="FX Multi-Source", layout="wide")
+apply_style()
+hero(
+    "FX Multi-Source · 02739452",
+    "Thai Baht <em>/</em> JPY · USD · EUR · KRW",
+    "รวมอัตราแลกเปลี่ยนจาก 3 แหล่ง — Frankfurter API (ECB), Yahoo Finance และ x-rates.com "
+    "(web scraping) ประมวลผลด้วย Apache Airflow แล้วอ่านตรงจาก PostgreSQL",
 )
 
 data = query(
@@ -38,7 +46,7 @@ data["unit"] = data["quote"].map(unit_label)
 # ---------------------------- ตัวกรอง ----------------------------
 min_d, max_d = data["rate_date"].min().date(), data["rate_date"].max().date()
 with st.sidebar:
-    st.header("ตัวกรอง")
+    st.header("Filters")
     quotes = st.multiselect(
         "สกุลเงิน", list(QUOTE_INFO), default=list(QUOTE_INFO),
         format_func=lambda q: f"{q} — {QUOTE_INFO[q]['name']}",
@@ -67,7 +75,8 @@ mask = (
 view = data[mask]
 
 # ---------------------------- KPI ----------------------------
-st.subheader("ภาพรวม")
+section("01", "Overview", f"ล่าสุด {data['rate_date'].max():%d %b %Y} · บาทต่อหน่วย · เทียบ 7 วันก่อน "
+        "(สีแดง = เงินต่างประเทศแพงขึ้น)")
 cols = st.columns(len(quotes))
 for col, q in zip(cols, quotes):
     s = data[data["quote"] == q].sort_values("rate_date")
@@ -79,22 +88,22 @@ for col, q in zip(cols, quotes):
     if not prev.empty:
         delta = (last["thb"] / prev.iloc[-1]["thb"] - 1) * 100
     col.metric(
-        f"{unit_label(q)} ({last['rate_date']:%d %b %Y})",
-        f"{last['thb']:,.2f} บาท",
-        f"{delta:+.2f}% จาก 7 วันก่อน" if delta is not None else None,
+        f"{unit_label(q)} · THB",
+        f"{last['thb']:,.2f}",
+        f"{delta:+.2f}%" if delta is not None else None,
         delta_color="inverse",  # บาทต่อหน่วยลดลง = เงินต่างประเทศถูกลง = สีเขียว
     )
 
 k1, k2, k3, k4 = st.columns(4)
 raw_total = query("SELECT COUNT(*) AS n FROM fx_rates_raw")
-k1.metric("แถวที่แสดง (หลังกรอง)", f"{len(view):,}")
-k2.metric("ข้อมูลรวมหลังตัดซ้ำ", f"{len(data):,}")
-k3.metric("ข้อมูลดิบทุกแหล่ง", f"{int(raw_total['n'].iloc[0]):,}" if not raw_total.empty else "-")
-k4.metric("ความต่างระหว่างแหล่ง (เฉลี่ย)",
+k1.metric("Rows shown", f"{len(view):,}")
+k2.metric("Unified rows", f"{len(data):,}")
+k3.metric("Raw rows · 3 sources", f"{int(raw_total['n'].iloc[0]):,}" if not raw_total.empty else "-")
+k4.metric("Avg source spread",
           f"{view['spread_pct'].mean():.3f}%" if not view.empty else "-")
 
 # ---------------------------- กราฟ ----------------------------
-st.subheader("แนวโน้มราคา (บาทต่อหน่วย)")
+section("02", "Price Trend", "บาทต่อหน่วย")
 if view.empty:
     st.info("ไม่มีข้อมูลตรงกับตัวกรอง")
 else:
@@ -114,7 +123,7 @@ else:
         .encode(
             x=alt.X("rate_date:T", title="วันที่"),
             y=alt.Y("value:Q", title=y_title, scale=alt.Scale(zero=False)),
-            color=alt.Color("unit:N", title="สกุล"),
+            color=alt.Color("unit:N", title="สกุล", scale=QUOTE_COLORS),
             tooltip=[alt.Tooltip("rate_date:T", title="วันที่"),
                      alt.Tooltip("unit:N", title="สกุล"),
                      alt.Tooltip("thb:Q", title="บาท", format=",.4f")],
@@ -125,7 +134,7 @@ else:
     st.altair_chart(chart, use_container_width=True)
 
 # ------------------ เปรียบเทียบรายแหล่ง (จากตาราง raw) ------------------
-st.subheader("เทียบราคาจากแต่ละแหล่ง")
+section("03", "Source Comparison", "ราคาเดียวกันจากแต่ละแหล่ง")
 q_cmp = st.selectbox("สกุล", quotes, format_func=unit_label, key="cmp")
 raw = query(
     """
@@ -144,7 +153,7 @@ if not raw.empty:
         .encode(
             x=alt.X("rate_date:T", title="วันที่"),
             y=alt.Y("thb:Q", title=f"บาทต่อ {unit_label(q_cmp)}", scale=alt.Scale(zero=False)),
-            color=alt.Color("source:N", title="แหล่ง"),
+            color=alt.Color("source:N", title="แหล่ง", scale=SOURCE_COLORS),
             tooltip=["source", alt.Tooltip("rate_date:T"), alt.Tooltip("thb:Q", format=",.4f")],
         )
         .properties(height=300)
@@ -154,7 +163,7 @@ if not raw.empty:
     st.caption("แสดงไม่เกิน 60 วันล่าสุดของช่วงที่เลือก (x-rates.com ดึงย้อนหลังเฉพาะช่วงสั้น)")
 
 # ---------------------------- ตาราง ----------------------------
-st.subheader("ตารางข้อมูล (หลังรวมและตัดรายการซ้ำข้ามแหล่ง)")
+section("04", "Unified Dataset", "หลังรวมและตัดรายการซ้ำข้ามแหล่ง")
 table = view.sort_values(["rate_date", "quote"], ascending=[False, True])[
     ["rate_date", "quote", "unit", "thb", "rate", "spread_pct", "source_count", "sources"]
 ].rename(columns={

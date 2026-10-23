@@ -4,11 +4,15 @@ import pandas as pd
 import streamlit as st
 
 from db import query
+from style import apply_style, color_status, hero, kv, section, status_badge
 
-st.set_page_config(page_title="Pipeline Status", page_icon="🛠️", layout="wide")
-st.title("🛠️ สถานะ Pipeline")
-
-STATUS_ICON = {"SUCCESS": "🟢", "PARTIAL": "🟡", "DQ_FAILED": "🟠", "FAILED": "🔴"}
+st.set_page_config(page_title="Pipeline Status", layout="wide")
+apply_style()
+hero(
+    "FX Multi-Source · Pipeline",
+    "Pipeline <em>/</em> Status",
+    "สถานะการรันของ DAG fx_multi_source_dag แหล่งข้อมูลที่ใช้ได้ในแต่ละรอบ และผลตรวจคุณภาพข้อมูล",
+)
 
 runs = query(
     """
@@ -21,27 +25,36 @@ if runs.empty:
     st.info("ยังไม่มีประวัติการรัน — รอ DAG `fx_multi_source_dag` รันรอบแรก")
     st.stop()
 
+for col in ["started_at", "finished_at"]:
+    runs[col] = pd.to_datetime(runs[col], utc=True).dt.tz_convert("Asia/Bangkok").dt.strftime("%Y-%m-%d %H:%M:%S")
 latest = runs.iloc[0]
+finished = pd.Timestamp(latest["finished_at"])
+
+section("01", "Latest Run", latest["run_id"])
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("สถานะรอบล่าสุด", f"{STATUS_ICON.get(latest['status'], '⚪')} {latest['status']}")
-c2.metric("รันเสร็จเมื่อ", pd.Timestamp(latest["finished_at"]).tz_convert("Asia/Bangkok")
-          .strftime("%d %b %Y %H:%M"))
-c3.metric("แหล่งที่ใช้ได้", latest["sources_ok"] or "-")
-c4.metric("แหล่งที่ล่ม", latest["sources_failed"] or "ไม่มี")
+c1.markdown(kv("Status", status_badge(latest["status"])), unsafe_allow_html=True)
+c2.markdown(kv("Finished", finished.strftime("%d %b %Y · %H:%M")), unsafe_allow_html=True)
+c3.markdown(kv("Sources OK", latest["sources_ok"] or "-"), unsafe_allow_html=True)
+c4.markdown(kv("Sources Down", latest["sources_failed"] or "none"), unsafe_allow_html=True)
+st.write("")
+st.markdown(
+    " &nbsp;&nbsp; ".join(status_badge(s) for s in ["SUCCESS", "PARTIAL", "DQ_FAILED", "FAILED"]),
+    unsafe_allow_html=True,
+)
+st.caption("SUCCESS ครบทุกแหล่ง · PARTIAL บางแหล่งล่มแต่รวมจากที่เหลือได้ · "
+           "DQ_FAILED ไม่ผ่านตรวจคุณภาพ (dashboard ไม่ถูกอัปเดต) · FAILED")
 
-st.caption("🟢 SUCCESS ครบทุกแหล่ง · 🟡 PARTIAL บางแหล่งล่มแต่รวมจากที่เหลือได้ · "
-           "🟠 DQ_FAILED ไม่ผ่านตรวจคุณภาพ (dashboard ไม่ถูกอัปเดต) · 🔴 FAILED")
-
-st.subheader("ผลตรวจคุณภาพข้อมูล (รอบล่าสุด)")
+section("02", "Data Quality", "ผลตรวจรอบล่าสุด")
 dq = query(
     "SELECT check_name, passed, detail FROM dq_results WHERE run_id = %s ORDER BY check_name",
     (latest["run_id"],),
 )
 if not dq.empty:
-    dq["ผล"] = dq["passed"].map({True: "✅ ผ่าน", False: "❌ ไม่ผ่าน"})
-    st.dataframe(dq[["check_name", "ผล", "detail"]], hide_index=True, use_container_width=True)
+    dq["result"] = dq["passed"].map({True: "PASS", False: "FAIL"})
+    st.dataframe(dq[["check_name", "result", "detail"]].style.map(color_status, subset=["result"]),
+                 hide_index=True, use_container_width=True)
 
-st.subheader("แหล่งข้อมูลในแต่ละรอบ")
+section("03", "Sources per Run")
 src = query(
     """
     SELECT s.run_id, r.finished_at, s.source, s.status, s.rows
@@ -50,18 +63,18 @@ src = query(
     """
 )
 if not src.empty:
-    pivot = src.pivot_table(index=["finished_at", "run_id"], columns="source",
-                            values="status", aggfunc="first").sort_index(ascending=False)
-    st.dataframe(
-        pivot.map(lambda v: "✅ success" if v == "success" else "❌ failed"),
-        use_container_width=True,
-    )
+    src["finished_at"] = (pd.to_datetime(src["finished_at"], utc=True)
+                          .dt.tz_convert("Asia/Bangkok").dt.strftime("%Y-%m-%d %H:%M:%S"))
+    pivot = (src.pivot_table(index=["finished_at", "run_id"], columns="source",
+                             values="status", aggfunc="first")
+             .sort_index(ascending=False).reset_index())
+    st.dataframe(pivot.style.map(color_status), hide_index=True, use_container_width=True)
 
-st.subheader("ประวัติการรัน")
-runs["status"] = runs["status"].map(lambda s: f"{STATUS_ICON.get(s, '⚪')} {s}")
-st.dataframe(runs, hide_index=True, use_container_width=True)
+section("04", "Run History")
+st.dataframe(runs.style.map(color_status, subset=["status"]),
+             hide_index=True, use_container_width=True)
 
-st.subheader("ข้อมูลดิบแยกตามแหล่ง")
+section("05", "Raw Data by Source")
 per_src = query(
     """
     SELECT source, COUNT(*) AS rows, MIN(rate_date) AS first_date, MAX(rate_date) AS last_date,
@@ -78,5 +91,5 @@ quarantine = query(
     """
 )
 if not quarantine.empty:
-    st.subheader("แถวที่ถูกกักไว้ (ไม่ผ่าน quality check)")
+    section("06", "Quarantine", "แถวที่ไม่ผ่าน quality check")
     st.dataframe(quarantine, hide_index=True, use_container_width=True)
