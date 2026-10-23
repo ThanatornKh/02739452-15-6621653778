@@ -23,45 +23,64 @@ def line_chart(df, series, scale, y_title, height, split=False, points=False, fo
     """กราฟเส้น: กด legend เพื่อเลือกดูทีละเส้น (Shift + คลิก เลือกหลายเส้น), ลาก/ซูมได้
     split=True แยกเป็นกราฟย่อยละ 1 เส้น, focus_day = วันที่ค้นหา (เส้นประ + จุดของวันนั้น)"""
 
+    # แกนวันที่ใช้สตริง YYYY-MM-DD + สเกล UTC ทุก layer -> ตำแหน่งตรงกันและวันที่ในกล่องอ่านง่าย
+    x_enc = alt.X("วันที่:T", title="วันที่", scale=alt.Scale(type="utc"))
+
     def build(d, h, with_legend_select):
         sel = alt.selection_point(fields=[series], bind="legend")
-        # เส้นเล็ง: ชี้ตรงไหนก็จับวันที่ใกล้ที่สุด แล้วโชว์ค่าของทุกเส้นในวันนั้นในกล่องเดียว
-        hover = alt.selection_point(fields=["rate_date"], nearest=True, on="pointerover",
+        # เส้นเล็ง: ชี้ตรงไหนก็จับวันที่ใกล้ที่สุด แล้วโชว์ค่าในวันนั้นในกล่องเดียว
+        hover = alt.selection_point(fields=["วันที่"], nearest=True, on="pointerover",
                                     clear="pointerout", empty=False)
-        names = [n for n in scale.domain if n in set(d[series])]
-        keys = {n: f"s{i}" for i, n in enumerate(names)}  # ชื่อคอลัมน์ปลอดภัยสำหรับ pivot
-        d = d.assign(_key=d[series].map(keys))
+        d = pd.DataFrame({
+            "วันที่": d["rate_date"].dt.strftime("%Y-%m-%d"),
+            series: d[series],
+            "value": d["value"],
+            "_label": d[series] + " (บาท)",
+            "_thb": d["thb"].round(4),
+        })
         base = alt.Chart(d).encode(
-            x=alt.X("rate_date:T", title="วันที่"),
+            x=x_enc,
             y=alt.Y("value:Q", title=y_title, scale=alt.Scale(zero=False)),
             # สัญลักษณ์ legend คงแบบเดิม (ขีดสำหรับกราฟเส้นล้วน, วงกลมสำหรับกราฟที่มีจุด)
             color=alt.Color(f"{series}:N", title="", scale=scale,
                             legend=alt.Legend(symbolType="circle" if points else "stroke")),
         )
         line = base.mark_line(strokeWidth=1.8, point=points)
-        if with_legend_select:
-            line = line.encode(opacity=alt.condition(sel, alt.value(1), alt.value(0.08))).add_params(sel)
         hover_dots = base.mark_point(size=70, filled=True, stroke="white", strokeWidth=1).encode(
             opacity=alt.condition(hover, alt.value(1), alt.value(0)))
+        tip_data = alt.Chart(d)
+        if with_legend_select:
+            line = line.encode(opacity=alt.condition(sel, alt.value(1), alt.value(0.08))).add_params(sel)
+            # เลือกเส้นใน legend แล้ว -> จุดและกล่องข้อมูลแสดงเฉพาะเส้นที่เลือก
+            hover_dots = hover_dots.transform_filter(sel)
+            tip_data = tip_data.transform_filter(sel)
+        # pivot: 1 แถวต่อวัน มีคอลัมน์เฉพาะเส้นที่ผ่าน filter -> เส้นที่ไม่ได้เลือกเป็น undefined
+        # และไม่ถูกแสดงในกล่อง (title = หัวกล่องเป็นวันที่)
+        names = [n for n in scale.domain if n in set(d[series])]
+        keys = {f"{n} (บาท)": f"s{i}" for i, n in enumerate(names)}  # ชื่อคอลัมน์ปลอดภัย
+        tip_data = tip_data.transform_calculate(_key=" + ".join(
+            [f"(datum._label == '{lb}' ? '{k}' : '')" for lb, k in keys.items()]))
+        # กล่องข้อมูลเป็น object: 'title' = หัวกล่อง (วันที่), เส้นที่ไม่ได้เลือกมีค่า undefined
+        # ซึ่ง vega-tooltip ข้ามไปเอง -> กล่องแสดงเฉพาะเส้นที่เลือก
+        tip_obj = "{'title': utcFormat(datum['วันที่'], '%d %b %Y')" + "".join(
+            f", '{lb}': isValid(datum['{k}']) ? format(datum['{k}'], ',.4f') : datum['{k}']"
+            for lb, k in keys.items()) + "}"
         crosshair = (
-            alt.Chart(d).transform_pivot("_key", value="thb", groupby=["rate_date"])
+            tip_data.transform_pivot("_key", value="_thb", groupby=["วันที่"])
+            .transform_calculate(_tip=tip_obj)
             .mark_rule(color="#8a8a8a", strokeWidth=1)
-            .encode(
-                x="rate_date:T",
-                opacity=alt.condition(hover, alt.value(0.9), alt.value(0)),
-                tooltip=[alt.Tooltip("rate_date:T", title="วันที่", format="%d %b %Y")]
-                + [alt.Tooltip(f"{keys[n]}:Q", title=f"{n} (บาท)", format=",.4f") for n in names],
-            )
+            .encode(x=x_enc, opacity=alt.condition(hover, alt.value(0.9), alt.value(0)),
+                    tooltip=alt.Tooltip("_tip:N"))
             .add_params(hover)
         )
         layers = [line.interactive(), hover_dots, crosshair]
         if focus_day is not None:
-            ts = pd.Timestamp(focus_day)
-            rule = alt.Chart(pd.DataFrame({"rate_date": [ts]})).mark_rule(
-                color="#d0021b", strokeDash=[5, 4], strokeWidth=1.5).encode(x="rate_date:T")
-            dots = alt.Chart(d[d["rate_date"] == ts]).mark_point(
+            day = pd.Timestamp(focus_day).strftime("%Y-%m-%d")
+            rule = alt.Chart(pd.DataFrame({"วันที่": [day]})).mark_rule(
+                color="#d0021b", strokeDash=[5, 4], strokeWidth=1.5).encode(x=x_enc)
+            dots = alt.Chart(d[d["วันที่"] == day]).mark_point(
                 size=110, filled=True, stroke="white", strokeWidth=1).encode(
-                x="rate_date:T", y="value:Q", color=alt.Color(f"{series}:N", title="", scale=scale))
+                x=x_enc, y="value:Q", color=alt.Color(f"{series}:N", title="", scale=scale))
             layers += [rule, dots]
         return alt.layer(*layers).properties(height=h)
 
@@ -231,7 +250,7 @@ else:
                    points=focus_day is not None, focus_day=focus_day),
         use_container_width=True, theme=None,
     )
-    st.caption("ชี้เมาส์ที่กราฟเพื่อดูค่าของทุกเส้นในวันนั้น · กดชื่อในคำอธิบายสีเพื่อแยกดูทีละเส้น (Shift + คลิก เลือกหลายเส้น, คลิกที่ว่างเพื่อแสดงทั้งหมด) · "
+    st.caption("ชี้เมาส์ที่กราฟเพื่อดูค่าในวันนั้น (เลือกเส้นใน legend แล้วจะแสดงเฉพาะเส้นที่เลือก) · กดชื่อในคำอธิบายสีเพื่อแยกดูทีละเส้น (Shift + คลิก เลือกหลายเส้น, คลิกที่ว่างเพื่อแสดงทั้งหมด) · "
                "ลากเพื่อเลื่อน · scroll เพื่อซูม · ดับเบิลคลิกเพื่อรีเซ็ต")
 
     if focus_day is not None:
