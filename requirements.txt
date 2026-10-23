@@ -1,0 +1,9 @@
+# แพ็กเกจที่ DAG ใช้ — ติดตั้งลง image ของ Airflow ผ่าน Dockerfile
+# (requests / pandas / provider postgres มีใน apache/airflow:2.10.4 อยู่แล้ว
+#  ระบุไว้ให้เห็นว่าโค้ดพึ่งอะไร โดยไม่ตรึงเวอร์ชันเพื่อไม่ให้ชนกับ constraints ของ Airflow)
+apache-airflow-providers-postgres
+requests
+pandas
+beautifulsoup4==4.12.3
+
+# dashboard ใช้ไฟล์ web/requirements.txt แยกต่างหาก

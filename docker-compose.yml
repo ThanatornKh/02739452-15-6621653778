@@ -1,0 +1,151 @@
+# =========================================================================
+# FX Multi-Source — ค่าเงินบาทเทียบ JPY / USD / EUR / KRW จาก 3 แหล่ง
+# Airflow (LocalExecutor) + PostgreSQL + Streamlit dashboard
+#
+#   cp .env.example .env        (แก้รหัสผ่านใน .env)
+#   docker compose up -d --build
+#
+#   Airflow UI  : http://localhost:8090   (user/pass ตาม .env)
+#   Dashboard   : http://localhost:8501
+#   PostgreSQL  : localhost:5435          (ข้อมูลปลายทาง, user/pass ตาม .env)
+# =========================================================================
+
+x-airflow-common:
+  &airflow-common
+  build: .
+  image: fx-multisource-airflow:2.10.4
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD:?copy .env.example to .env}@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ''
+    # DAG เปิดใช้งานทันทีที่ขึ้น -> รันรอบแรกให้อัตโนมัติ ไม่ต้องกด Unpause
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: Asia/Bangkok
+    AIRFLOW__WEBSERVER__DEFAULT_UI_TIMEZONE: Asia/Bangkok
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'false'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: '10'
+    # Connection ของฐานข้อมูลปลายทาง ตั้งผ่าน env -> ไม่ต้องไปกดสร้างใน UI
+    AIRFLOW_CONN_POSTGRES_TARGET: postgresql://${TARGET_DB_USER}:${TARGET_DB_PASSWORD}@postgres_target:5432/${TARGET_DB_NAME}
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./config:/opt/airflow/config
+    - ./plugins:/opt/airflow/plugins
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
+    postgres_target:
+      condition: service_healthy
+
+services:
+
+  # metadata ของ Airflow เอง (ไม่เปิด port ออกนอก)
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD}
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+  # ฐานข้อมูลปลายทาง — DAG เขียน, dashboard อ่าน
+  postgres_target:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${TARGET_DB_USER:?copy .env.example to .env}
+      POSTGRES_PASSWORD: ${TARGET_DB_PASSWORD:?copy .env.example to .env}
+      POSTGRES_DB: ${TARGET_DB_NAME:?copy .env.example to .env}
+    ports:
+      - "5435:5432"
+    volumes:
+      - target-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /sources/logs /sources/dags /sources/plugins
+        chown -R "${AIRFLOW_UID:-50000}:0" /sources/logs /sources/dags /sources/plugins
+        exec /entrypoint airflow version
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:?copy .env.example to .env}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:?copy .env.example to .env}
+    user: "0:0"
+    volumes:
+      - .:/sources
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8090:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # dashboard อ่าน PostgreSQL ตรงๆ (ไม่ผ่าน API ตัวกลาง)
+  web:
+    build: ./web
+    image: fx-multisource-web:latest
+    environment:
+      DB_HOST: postgres_target
+      DB_PORT: "5432"
+      DB_NAME: ${TARGET_DB_NAME}
+      DB_USER: ${TARGET_DB_USER}
+      DB_PASSWORD: ${TARGET_DB_PASSWORD}
+    ports:
+      - "8501:8501"
+    depends_on:
+      postgres_target:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  airflow-db:
+  target-db:

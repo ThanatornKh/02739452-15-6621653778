@@ -1,0 +1,17 @@
+# secrets
+.env
+
+# airflow runtime
+logs/*
+!logs/.gitkeep
+__pycache__/
+*.pyc
+
+# งานเก่าก่อนสอบ (ไม่ได้ใช้ในระบบนี้)
+_legacy/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
