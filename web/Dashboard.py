@@ -111,12 +111,25 @@ with st.sidebar:
         value = st.query_params.get(param)
         if key not in st.session_state and value and value.isdigit() and int(value) in choices:
             st.session_state[key] = int(value)
-    f_year = st.selectbox("ปี", ["ทั้งหมด", *years], key="f_year")
-    f_month = st.selectbox("เดือน", ["ทั้งหมด", *range(1, 13)], key="f_month",
+    def _on_year():
+        # เลือกปี "ทั้งหมด" -> ล้างเดือนและวันด้วย ไม่ให้ค่าเก่าค้างอยู่
+        if st.session_state["f_year"] == "ทั้งหมด":
+            st.session_state["f_month"] = "ทั้งหมด"
+            st.session_state["f_day"] = "ทั้งหมด"
+
+    def _on_month():
+        if st.session_state["f_month"] == "ทั้งหมด":
+            st.session_state["f_day"] = "ทั้งหมด"
+
+    f_year = st.selectbox("ปี", ["ทั้งหมด", *years], key="f_year", on_change=_on_year)
+    f_month = st.selectbox("เดือน", ["ทั้งหมด", *range(1, 13)], key="f_month", on_change=_on_month,
                            format_func=lambda m: m if m == "ทั้งหมด" else MONTHS_TH[m - 1],
                            disabled=f_year == "ทั้งหมด")
     n_days = (calendar.monthrange(int(f_year), int(f_month))[1]
               if "ทั้งหมด" not in (f_year, f_month) else 31)
+    # เปลี่ยนเดือนแล้ววันเดิมเกินจำนวนวันของเดือนใหม่ (เช่น 31 -> ก.พ.) -> กลับเป็น "ทั้งหมด"
+    if isinstance(st.session_state.get("f_day"), int) and st.session_state["f_day"] > n_days:
+        st.session_state["f_day"] = "ทั้งหมด"
     f_day = st.selectbox("วัน", ["ทั้งหมด", *range(1, n_days + 1)], key="f_day",
                          disabled=f_year == "ทั้งหมด" or f_month == "ทั้งหมด")
 
