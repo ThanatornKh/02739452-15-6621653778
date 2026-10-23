@@ -28,7 +28,6 @@ from __future__ import annotations
 import logging
 import time
 from datetime import date, datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 import pendulum
 import requests
@@ -285,13 +284,15 @@ with DAG(
                 url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{BASE}{q}=X"
                        f"?period1={period1}&period2={period2}&interval=1d")
                 result = _http_get(url).json()["chart"]["result"][0]
-                tz = ZoneInfo(result["meta"].get("exchangeTimezoneName") or "UTC")
                 closes = result["indicators"]["quote"][0]["close"]
                 for ts, close in zip(result["timestamp"], closes):
                     if close is None:
                         continue
-                    d = datetime.fromtimestamp(ts, tz).date()
-                    if d.weekday() >= 5:  # FX ไม่มีราคาเสาร์-อาทิตย์จริง ตัดทิ้ง
+                    # ใช้วันที่แบบ UTC: ถ้าแปลงเป็นเวลาลอนดอน แท่งที่เปิดคืนวันอาทิตย์
+                    # (23:00 UTC, สภาพคล่องต่ำ ราคาเพี้ยน) จะกลายเป็นวันจันทร์และต่างจาก
+                    # แหล่งอื่นเกิน 3% -> ใช้ UTC แล้วตัดแท่งเสาร์-อาทิตย์ทิ้ง
+                    d = datetime.fromtimestamp(ts, timezone.utc).date()
+                    if d.weekday() >= 5:
                         continue
                     records.append({"rate_date": d.isoformat(), "quote": q, "rate": close})
                 time.sleep(0.5)

@@ -7,8 +7,6 @@ logs/*
 __pycache__/
 *.pyc
 
-# งานเก่าก่อนสอบ (ไม่ได้ใช้ในระบบนี้)
-_legacy/
 
 # OS / editor
 .DS_Store
