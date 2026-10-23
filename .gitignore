@@ -13,3 +13,6 @@ __pycache__/
 Thumbs.db
 .vscode/
 .idea/
+
+# ไฟล์สรุปฉบับแก้ไขเอง (ไม่ขึ้น repo)
+/15_6621653778_summary.docx
