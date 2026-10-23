@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>15_6621653778_summary</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap');
+  @page { size: A4; margin: 11mm 13mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Sarabun', 'Leelawadee UI', 'Tahoma', sans-serif; font-size: 10.2pt; line-height: 1.38;
+         color: #111; margin: 0; }
+  h1 { font-size: 15pt; margin: 0 0 1mm; }
+  h2 { font-size: 12pt; margin: 3.2mm 0 1.4mm; padding-bottom: 1mm; border-bottom: 1.5px solid #d0021b; }
+  h3 { font-size: 10.6pt; margin: 2mm 0 .8mm; }
+  p { margin: .8mm 0; }
+  ul, ol { margin: .6mm 0 .6mm 5mm; padding: 0; }
+  li { margin: .3mm 0; }
+  .meta { display: grid; grid-template-columns: 1fr 1fr; gap: .4mm 6mm; font-size: 9.6pt;
+          background: #f5f5f5; padding: 2mm 3mm; border-left: 3px solid #d0021b; }
+  .meta b { display: inline-block; min-width: 23mm; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.3pt; margin: 1mm 0; }
+  th, td { border: 1px solid #ccc; padding: .8mm 1.6mm; vertical-align: top; text-align: left; }
+  th { background: #f0f0f0; }
+  .ok { color: #11823b; font-weight: 700; }
+  figure { margin: 1.5mm 0; }
+  figure img { width: 100%; border: 1px solid #ccc; display: block; }
+  figcaption { font-size: 8.6pt; color: #555; margin-top: .6mm; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .page { page-break-after: always; }
+  code { font-family: Consolas, monospace; font-size: 8.8pt; background: #f2f2f2; padding: 0 .8mm; }
+  .prob { border: 1px solid #ddd; padding: 1.4mm 2.4mm; margin: 1.6mm 0; }
+  .prob p { margin: .4mm 0; }
+  .tag { font-weight: 700; color: #d0021b; }
+</style>
+</head>
+<body>
+
+<!-- ============================== หน้า 1 ============================== -->
+<div class="page">
+  <h1>สรุปงาน: ระบบรวมอัตราแลกเปลี่ยนเงินบาทจาก 3 แหล่ง (FX Multi-Source)</h1>
+  <div class="meta">
+    <div><b>รายวิชา</b> 02739452 แพลตฟอร์มข้อมูลขนาดใหญ่ฯ</div>
+    <div><b>ลำดับที่ / รหัส</b> 15 / 6621653778</div>
+    <div><b>ชื่อ-นามสกุล</b> ..............................................</div>
+    <div><b>หมู่</b> ..........</div>
+    <div style="grid-column: span 2"><b>GitHub repo</b>
+      <a href="https://github.com/ThanatornKh/02739452-15-6621653778">https://github.com/ThanatornKh/02739452-15-6621653778</a></div>
+    <div style="grid-column: span 2"><b>หัวข้อ</b> หมวด: อัตราแลกเปลี่ยนเงินตรา · ขอบเขต: ค่าเงินบาทเทียบ JPY / USD / EUR / KRW รายวัน ย้อนหลัง 6 ปี</div>
+  </div>
+
+  <h2>1. ภาพรวมงานแต่ละส่วน — ทำได้ครบระดับ 1, 2, 3 และโบนัส</h2>
+  <table>
+    <tr><th style="width:17%">ระดับ</th><th>สิ่งที่ทำ (อ้างอิงใน <code>dags/fx_multi_source_dag.py</code>, <code>web/</code>)</th><th style="width:8%">ผล</th></tr>
+    <tr><td>1 ขั้นต่ำ</td><td>DAG แบบ extract → transform → load ลง PostgreSQL และเว็บ Streamlit แสดงตารางและกราฟเส้น โดยอ่านจาก PostgreSQL ตรงด้วย psycopg2</td><td class="ok">ครบ</td></tr>
+    <tr><td>2 มาตรฐาน</td><td>3 แหล่งรันขนานกันใน TaskGroup <code>frankfurter</code> / <code>yahoo</code> / <code>xrates</code> แปลงทุกแหล่งให้อยู่ใน schema เดียวกัน (<code>fx_rates_raw</code>) ใช้ <code>INSERT … ON CONFLICT DO UPDATE</code> โดย PK = (source, date, base, quote) รันซ้ำ 4 รอบแล้วจำนวนแถวยังคง 11,748 แถวเท่าเดิม เว็บมี KPI 8 ตัว และตัวกรองสกุล, ช่วงเวลา และจำนวนแหล่งที่ยืนยัน</td><td class="ok">ครบ</td></tr>
+    <tr><td>3 ท้าทาย</td><td>แหล่งที่ 3 เป็น <b>web scraping</b> จาก x-rates.com (requests + BeautifulSoup ไม่ใช้ Selenium) ส่วน <code>merge_dedup</code> ตั้ง <code>trigger_rule=all_done</code> จึงรวมข้อมูลจากแหล่งที่เหลือได้เมื่อมีแหล่งล่ม (ทดสอบด้วย <code>simulate_down=yahoo</code> แล้ว DAG ยัง success สถานะเป็น PARTIAL ดู Grid view ในภาพที่ 4) ตัดรายการซ้ำข้ามแหล่งด้วย GROUP BY (วัน, สกุล) ใช้ค่ามัธยฐาน ทำให้ 11,748 แถวเหลือ 6,228 แถว จากนั้น <code>quality_check</code> (@task.branch) ตรวจ 5 ข้อ ถ้าผ่านไป <code>publish</code> ถ้าไม่ผ่านไป <code>quarantine</code></td><td class="ok">ครบ</td></tr>
+    <tr><td>โบนัส</td><td>มีหน้า <b>Pipeline Status</b> บนเว็บ (สถานะรายรอบ, รายแหล่ง, ผล DQ) และใช้ <b>Dynamic Task Mapping</b> กับ <code>scrape_day.expand()</code> (22 วัน)</td><td class="ok">ครบ</td></tr>
+  </table>
+  <p><b>แหล่งข้อมูล:</b> (1) Frankfurter API ข้อมูล ECB 6,148 แถว · (2) Yahoo Finance chart JSON 5,512 แถว · (3) x-rates.com scrape 30 วันล่าสุด 88 แถว
+     รวมข้อมูลดิบ 11,748 แถว และหลังตัดซ้ำเหลือ <b>6,228 แถว</b> (เกณฑ์ขั้นต่ำ 100 แถว)
+     robots.txt ของ x-rates อนุญาต <code>/historical/</code> ระบบหน่วงเวลา 1 วินาทีต่อ request และทำงานพร้อมกันได้ไม่เกิน 2 task ข้อมูลทั้งหมดไม่มีข้อมูลส่วนบุคคล (PDPA)
+     รันระบบด้วย <code>cp .env.example .env</code> แล้ว <code>docker compose up -d --build</code> จากนั้น DAG จะรันรอบแรกเองอัตโนมัติ ใช้เวลาประมาณ 50 วินาที</p>
+
+  <figure><img src="screenshots/pdf_graph.jpg">
+    <figcaption>ภาพที่ 1 Graph view: create_tables → 3 TaskGroup ขนานกัน (xrates ใช้ mapping 22 task) → merge_dedup → quality_check แตกเป็น publish/quarantine → record_run</figcaption></figure>
+</div>
+
+<!-- ============================== หน้า 2 ============================== -->
+<div class="page">
+  <div class="two">
+    <figure><img src="screenshots/pdf_dashboard.jpg">
+      <figcaption>ภาพที่ 2 Dashboard (http://localhost:8501): KPI, ตัวกรอง, กราฟแนวโน้ม, กราฟเทียบรายแหล่ง และตาราง มีสวิตช์ธีมขาว/ดำ</figcaption></figure>
+    <figure><img src="screenshots/pdf_status.jpg">
+      <figcaption>ภาพที่ 3 หน้า Pipeline Status: สถานะรอบล่าสุด, ผลตรวจคุณภาพ 5 ข้อ, สถานะแต่ละแหล่งรายรอบ และประวัติการรัน (SUCCESS / PARTIAL / DQ_FAILED)</figcaption></figure>
+  </div>
+
+  <h2>2. ปัญหาที่พบและวิธีแก้</h2>
+  <div class="prob">
+    <p><span class="tag">ปัญหา 1</span> <b>ข้อมูล Yahoo วันจันทร์เพี้ยน ทำให้รอบแรกไม่ผ่าน quality check</b></p>
+    <p><b>อาการ:</b> DAG รอบแรกไปทาง <code>quarantine</code> เพราะข้อ <code>cross_source_agree</code> ไม่ผ่าน มี 77 แถว (1.23%) ที่ Yahoo ต่างจาก Frankfurter เกิน 2% และ dashboard ไม่ถูกอัปเดต</p>
+    <p><b>หาสาเหตุ:</b> query <code>fx_rates WHERE spread_pct &gt; 2</code> พบว่าเกือบทั้งหมดเป็นวันจันทร์ จึงเปิด JSON ดิบของ Yahoo มาเทียบ พบว่าแท่งราคาประทับเวลา 23:00 UTC คืนวันอาทิตย์ (ช่วงตลาดเพิ่งเปิด สภาพคล่องต่ำ เช่น EUR/THB 36.50 ขณะที่ค่าจริงอยู่ราว 37.6) แต่โค้ดแปลงเวลาเป็น timezone ลอนดอน แท่งนี้จึงกลายเป็นวันจันทร์</p>
+    <p><b>วิธีแก้:</b> เปลี่ยนไปใช้วันที่แบบ UTC แล้วตัดแท่งเสาร์-อาทิตย์ทิ้ง ล้างข้อมูล Yahoo เก่าแล้วรันใหม่ แถวที่ต่างกันเกิน 2% ลดเหลือ 0.64% ผ่านเกณฑ์ และระบบ publish ได้ตามปกติ (commit <code>43e11eb</code>) ปัญหานี้แสดงว่า branch ตรวจคุณภาพกันข้อมูลผิดไม่ให้ขึ้น dashboard ได้จริง</p>
+  </div>
+  <div class="prob">
+    <p><span class="tag">ปัญหา 2</span> <b>หน้าเว็บ x-rates แสดงวันที่ไม่ตรงกับข้อมูล และวันเดียวพังอาจลากทั้งแหล่งพัง</b></p>
+    <p><b>อาการ:</b> ตอนทดลอง scrape ข้อความ <code>ratesTimestamp</code> ในหน้าเว็บขึ้น "Jan 01, 2026" ทุกวันที่ที่ขอ แต่ตัวเลขเรตเปลี่ยนไปตามวันจริง ถ้าอ่านวันที่จากหน้าเว็บ ข้อมูลทุกวันจะชนกันเป็นวันเดียว</p>
+    <p><b>หาสาเหตุ:</b> ใช้ curl ดึงหลายวันมาเทียบกัน (2025-12-15, 2026-03-10, 2026-10-21) แล้วเทียบเรตกับ Yahoo และ Frankfurter พบว่าค่าเรตถูกต้องตามวันที่ใน URL ส่วนข้อความวันที่ในหน้าเป็นค่าที่ผิด</p>
+    <p><b>วิธีแก้:</b> ใช้วันที่จากพารามิเตอร์ <code>date=</code> ใน URL แทนข้อความในหน้า เลือกเซลล์จากลิงก์ <code>to=JPY/USD/EUR/KRW</code> ด้วย BeautifulSoup และให้ <code>scrape_day</code> แต่ละวันจับ error ของตัวเองแล้วคืนลิสต์ว่าง ถ้าเกิด error ทุกวันจึงค่อยถือว่าแหล่งนี้ล่ม (ไปทาง trigger rule ของ merge)</p>
+  </div>
+  <div class="prob">
+    <p><span class="tag">ปัญหา 3</span> <b>ธีมขาวแสดงผลเพี้ยน: พื้นขาวแต่ตัวหนังสือขาว ส่วนกราฟและช่องเลือกยังเป็นสีดำ</b></p>
+    <p><b>อาการ:</b> กด Light theme แล้ว CSS ที่เขียนเองเปลี่ยนเป็นพื้นขาว แต่ label เป็นตัวอักษรขาวจนมองไม่เห็น ส่วนกราฟ, multiselect และตารางยังเป็นธีมมืด และผลบนเบราว์เซอร์แต่ละเครื่องไม่เหมือนกัน</p>
+    <p><b>หาสาเหตุ:</b> เทียบผลระหว่างหน้าต่างเก่าที่เปิดค้างไว้กับ session ใหม่ แล้ว inspect DOM ของ widget พบว่าวิธีแรกไปแก้ <code>theme.*</code> ฝั่ง server ซึ่งใช้ร่วมกันทุกหน้าต่าง Streamlit ส่งค่าธีมให้หน้าเว็บเฉพาะตอนเริ่ม session และเบราว์เซอร์ยังจำธีมเดิมไว้ ธีมจึงไม่ตรงกันระหว่าง CSS กับ widget</p>
+    <p><b>วิธีแก้:</b> เลิกแก้ธีมฝั่ง server แล้วเก็บโหมดใน <code>st.session_state</code> แยกต่อหน้าต่าง ทำธีมขาวด้วย CSS ที่ระบุ selector ของ widget โดยตรง (select, radio, toggle) ตั้งค่ากราฟ Altair เองด้วย <code>theme=None</code> และ <code>configure_axis</code> ตามโหมด และล็อกสีเส้นแต่ละสกุลด้วย <code>alt.Scale(domain, range)</code> ให้สีเส้นเหมือนเดิมทั้งสองธีม</p>
+  </div>
+</div>
+
+<!-- ============================== หน้า 3 ============================== -->
+<div>
+  <h2>3. การวางแผนและจัดลำดับงาน (เวลาสอบ 13:00–16:00)</h2>
+  <p><b>หลักที่ใช้:</b> ทำให้ <b>ระบบรันได้ครบ end-to-end เร็วที่สุด</b> แล้ว commit/push ทันที เพราะระบบนับเฉพาะ commit ก่อน 16:00 น. และอาจารย์จะรันจาก repo จากนั้นค่อยเพิ่มระดับ 2 → 3 → โบนัส → ความสวยงาม และเผื่อเวลาท้ายไว้ทดสอบ clone ใหม่</p>
+  <table>
+    <tr><th style="width:17%">ช่วงเวลา</th><th>งาน</th><th style="width:27%">ผลลัพธ์ / เหตุผล</th></tr>
+    <tr><td>13:00–13:20</td><td>อ่านโจทย์ ทดสอบแหล่งข้อมูลด้วย curl (Frankfurter, Yahoo, x-rates) อ่าน robots.txt ตรวจพอร์ตที่ว่าง และ pull image ของ Airflow ไว้ล่วงหน้า</td><td>ตรวจก่อนเขียนโค้ดว่าทุกแหล่งดึงได้จริงและถูกกติกา</td></tr>
+    <tr><td>13:20–13:25</td><td><code>docker-compose.yml</code> (LocalExecutor), <code>.env.example</code>, <code>.gitignore</code> และ DAG ครบ 3 แหล่ง (TaskGroup, UPSERT, dedup, branch, mapping)</td><td>ออกแบบโครงระดับ 3 ไว้ตั้งแต่แรก จะได้ไม่ต้องรื้อทีหลัง</td></tr>
+    <tr><td>13:25–13:30</td><td>Dashboard ตัวแรก รันระบบจริง แล้ว <b>commit + push ครั้งแรก</b></td><td>มีงานที่ส่งได้แล้วตั้งแต่ช่วงต้น</td></tr>
+    <tr><td>13:30–13:35</td><td>แก้ปัญหา Yahoo (ปัญหา 1) ทดสอบ simulate_down และรันซ้ำเพื่อตรวจ UPSERT แล้วเขียน README</td><td>พิสูจน์ระดับ 2–3 ด้วยผลรันจริง</td></tr>
+    <tr><td>13:35–13:45</td><td>ปรับดีไซน์ dashboard (โทนมินิมอล ดำ/ขาว), หน้า Pipeline Status, สวิตช์ธีม และจัดแท็กตัวกรองให้กว้างเท่ากัน</td><td>ทำโบนัสหลังงานหลักเสร็จแล้ว</td></tr>
+    <tr><td>13:45–14:15</td><td>ถ่ายภาพ Graph/Grid/Dashboard แล้วทำไฟล์ PDF สรุป</td><td>35 คะแนนของ PDF</td></tr>
+    <tr><td>14:15–16:00</td><td>ทดสอบ clone repo ใหม่ลงโฟลเดอร์ว่างแล้วรันตาม README, ตรวจว่าไม่มีรหัสผ่านใน git, commit สุดท้าย และส่งงาน</td><td>เวลาสำรอง กันกรณีอาจารย์รันไม่ได้</td></tr>
+  </table>
+
+  <h3>งานที่ตัดออก และเหตุผล</h3>
+  <ul>
+    <li><b>Bank of Thailand API</b> (แหล่งที่ระบุตอนจองไว้): ต้องสมัครสมาชิกเพื่อขอ API key และอาจารย์ต้องมี key ของตัวเองจึงจะรันได้ จึงเปลี่ยนเป็น x-rates.com ซึ่งไม่ต้องใช้ key และได้ส่วน web scraping ที่โจทย์บังคับไปด้วย</li>
+    <li><b>Scrape x-rates ย้อนหลัง 6 ปี</b>: ต้องยิงประมาณ 1,500 request ซึ่งไม่สุภาพต่อเว็บ (หน่วง 1 วินาทีต่อ request ก็ยังใช้เวลา 25 นาทีขึ้นไป) จึงจำกัดไว้ที่ 30 วัน ปรับได้ด้วย param <code>xrates_days</code> ส่วนข้อมูลย้อนหลังยาวใช้ 2 API แทน</li>
+    <li><b>โมเดลทำนาย "แลกเลย / รอ 2 สัปดาห์"</b>: เป็นไอเดียต่อยอดจากข้อมูลชุดนี้ แต่ไม่อยู่ในเกณฑ์ให้คะแนน และต้องติดตั้ง scikit-learn กับเทรนโมเดล ทำให้ระบบหนักขึ้นและเสี่ยงรันไม่ผ่านบนเครื่องอาจารย์ จึงตัดออก</li>
+    <li><b>CeleryExecutor (Redis + worker)</b>: เปลี่ยนเป็น LocalExecutor ให้เหลือ 6 container ซึ่งเบากว่าและเริ่มระบบได้เร็วกว่าบนเครื่องอาจารย์</li>
+  </ul>
+
+  <h3>ข้อควรรู้เวลารัน</h3>
+  <ul>
+    <li>ต้องใช้พอร์ต 8090 (Airflow), 8501 (Dashboard) และ 5435 (PostgreSQL) ไม่มีรหัสผ่านใดถูก commit ใน repo โดยค่าตั้งทั้งหมดอยู่ใน <code>.env.example</code></li>
+    <li>DAG เปิดใช้งานและรันรอบแรกเองอัตโนมัติ (ไม่ต้องกด Unpause และไม่ต้องสร้าง Connection เพราะตั้งผ่าน env <code>AIRFLOW_CONN_POSTGRES_TARGET</code>)</li>
+    <li>ข้อมูลของ Yahoo Finance และ x-rates ขึ้นกับเว็บภายนอก ถ้าแหล่งใดล่มในวันที่รัน DAG ยังจบได้และแสดงสถานะ PARTIAL ซึ่งเป็นพฤติกรรมที่ออกแบบไว้</li>
+  </ul>
+  <figure><img src="screenshots/pdf_grid.jpg">
+    <figcaption>ภาพที่ 4 Grid view 4 รอบ: รอบที่ 3 จำลองให้ yahoo ล่ม (สีแดง) แต่ merge, publish และ end ยังสำเร็จ · รอบแรก quarantine ทำงานเพราะ DQ ไม่ผ่าน (ดูปัญหาที่ 1) · scrape_day [] = 22 mapped tasks</figcaption></figure>
+</div>
+</body>
+</html>
