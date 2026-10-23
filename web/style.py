@@ -72,6 +72,17 @@ html, body, [class*="css"], .stApp, .stMarkdown, p, label, input, textarea, butt
 }}
 [data-testid="stMetricValue"] {{ font-weight: 300; font-size: 2.2rem; color: {text}; }}
 
+/* sidebar: เส้นแบ่งหัวข้อชัดเจน */
+[data-testid="stSidebar"] h2 {{
+    border-bottom: 1px solid {accent}; padding-bottom: .55rem !important; margin: 1.6rem 0 .2rem !important;
+    color: {text} !important; letter-spacing: .28em; font-size: .78rem; font-weight: 600;
+}}
+[data-testid="stSidebar"] [data-testid="stElementContainer"]:has([data-testid="stWidgetLabel"]) {{
+    border-top: 1px solid {line2}; padding-top: .85rem; margin-top: .35rem;
+}}
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {{ font-weight: 600; font-size: .9rem; }}
+[data-testid="stSidebarNav"] {{ border-bottom: 1px solid {line2}; padding-bottom: .8rem; }}
+
 /* แท็กที่เลือกใน multiselect ของ sidebar: เต็มแถว กว้างเท่ากัน เรียงเป็นรายการ */
 [data-testid="stSidebar"] [data-baseweb="tag"] {{
     width: 100%; max-width: none; margin: 3px 0; height: 30px; border-radius: 2px;
@@ -148,9 +159,15 @@ def theme_mode() -> str:
 
 
 def theme_toggle() -> str:
-    """สวิตช์ธีมขาว/ดำที่ sidebar (เก็บแยกต่อหน้าต่าง)"""
-    light = st.sidebar.toggle("Light theme", key="light_theme")
-    st.session_state["kx_mode"] = "light" if light else "dark"
+    """สวิตช์ธีมขาว/ดำที่ sidebar — เก็บโหมดใน session_state คีย์ธรรมดา (ไม่ใช่คีย์ของ widget)
+    เพราะ Streamlit ล้างค่า widget ทิ้งเมื่อเปลี่ยนหน้า ธีมจะได้คงเดิมทุกหน้า"""
+    st.session_state.setdefault("kx_mode", "dark")
+
+    def _flip():
+        st.session_state["kx_mode"] = "light" if st.session_state["_kx_light"] else "dark"
+
+    st.sidebar.toggle("Light theme", value=st.session_state["kx_mode"] == "light",
+                      key="_kx_light", on_change=_flip)
     return st.session_state["kx_mode"]
 
 
