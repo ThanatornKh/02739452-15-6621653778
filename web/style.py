@@ -4,7 +4,6 @@
 import html
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 ACCENT = "#d0021b"
 STATUS_COLOR = {
@@ -73,6 +72,15 @@ html, body, [class*="css"], .stApp, .stMarkdown, p, label, input, textarea, butt
 }}
 [data-testid="stMetricValue"] {{ font-weight: 300; font-size: 2.2rem; color: {text}; }}
 
+/* แท็กที่เลือกใน multiselect ของ sidebar: เต็มแถว กว้างเท่ากัน เรียงเป็นรายการ */
+[data-testid="stSidebar"] [data-baseweb="tag"] {{
+    width: 100%; max-width: none; margin: 3px 0; height: 30px; border-radius: 2px;
+    justify-content: space-between; padding: 0 8px 0 12px;
+}}
+[data-testid="stSidebar"] [data-baseweb="tag"] > span:first-child {{
+    max-width: none; overflow: visible; letter-spacing: .04em;
+}}
+
 /* status */
 .kx-status {{ display: inline-flex; align-items: center; gap: .55rem;
     text-transform: uppercase; letter-spacing: .18em; font-size: .8rem; color: {text}; }}
@@ -99,32 +107,74 @@ PALETTES = {
                   text="#0a0a0a", sub="#555555", muted="#6b6b6b", faint="#8a8a8a", nav="#333333",
                   accent=ACCENT),
 }
-# ธีมของ Streamlit เอง (ตาราง, ปุ่ม, แกนกราฟ) ต้องสลับไปพร้อม CSS
-STREAMLIT_THEMES = {
-    "dark": {"base": "dark", "backgroundColor": "#000000", "secondaryBackgroundColor": "#111111",
-             "textColor": "#ffffff", "primaryColor": ACCENT},
-    "light": {"base": "light", "backgroundColor": "#ffffff", "secondaryBackgroundColor": "#f3f3f3",
-              "textColor": "#0a0a0a", "primaryColor": ACCENT},
-}
+# ธีมขาว: ธีมของ Streamlit เองเป็นโทนดำ (config.toml) จึงต้องบังคับสีของ widget ด้วย CSS
+# ไม่สลับธีมฝั่ง server เพราะค่านั้นใช้ร่วมกันทุกหน้าต่าง และเบราว์เซอร์จำธีมเดิมไว้
+_LIGHT_EXTRA = """
+<style>
+.stApp, [data-testid="stSidebar"] {{ color: {text}; }}
+.stApp p, .stApp label, .stApp span, .stApp li, .stApp small,
+[data-testid="stWidgetLabel"] *, [data-testid="stMarkdownContainer"] *,
+[data-testid="stTickBarMin"], [data-testid="stTickBarMax"],
+[data-testid="stThumbValue"], [data-testid="stSidebarCollapseButton"] * {{ color: {text}; }}
+[data-testid="stCaptionContainer"] *, .kx-section .note, .kx-sub {{ color: {sub} !important; }}
+[data-testid="stMetricDelta"] * {{ color: inherit; }}
+[data-testid="stMetricDelta"] {{ color: {accent} !important; }}
+.kx-eyebrow, .kx-kv .k, [data-testid="stMetricLabel"] p, [data-testid="stSidebar"] h2 {{ color: {muted} !important; }}
+.kx-section .num, .kx-title em {{ color: {accent} !important; }}
+[data-testid="stMetricValue"], [data-testid="stMetricValue"] * {{ color: {text} !important; }}
+/* ช่องเลือก */
+[data-baseweb="select"] > div {{ background: #f3f3f3 !important; border-color: #dcdcdc !important; color: {text} !important; }}
+[data-baseweb="select"] input, [data-baseweb="select"] svg {{ color: {text} !important; fill: {text} !important; }}
+[data-baseweb="tag"] span, [data-baseweb="tag"] svg {{ color: #fff !important; fill: #fff !important; }}
+[data-baseweb="popover"] ul, [data-baseweb="popover"] li {{ background: #fff !important; color: {text} !important; }}
+[data-baseweb="popover"] li:hover {{ background: #f0f0f0 !important; }}
+[data-baseweb="input"] > div, [data-baseweb="input"] input {{ background: #f3f3f3 !important; color: {text} !important; }}
+/* radio: วงกลมที่ยังไม่เลือกเป็นขาวมีขอบ */
+[data-baseweb="radio"] > div:first-child {{ background: #fff !important; box-shadow: inset 0 0 0 1px #9a9a9a; }}
+[data-baseweb="radio"] > div:first-child > div {{ background: #fff !important; }}
+[data-baseweb="radio"]:has(input:checked) > div:first-child {{ background: {accent} !important; box-shadow: none; }}
+/* toggle ที่ปิดอยู่ */
+[data-baseweb="checkbox"] > div:first-child {{ background: #cfcfcf; }}
+[data-baseweb="checkbox"]:has(input:checked) > div:first-child {{ background: {accent}; }}
+/* ตาราง (วาดบน canvas ด้วยธีมดำ) -> กลับสีเป็นขาว โดยคงเฉดสีสถานะไว้ */
+[data-testid="stDataFrame"] {{ filter: invert(1) hue-rotate(180deg); }}
+[data-testid="stAlert"] * {{ color: {text} !important; }}
+</style>
+"""
+
+
+def theme_mode() -> str:
+    return st.session_state.get("kx_mode", "dark")
 
 
 def theme_toggle() -> str:
-    """สวิตช์ธีมขาว/ดำที่ sidebar — ตั้งค่า theme ของ Streamlit แล้ว rerun ให้ทุกส่วนเปลี่ยนตาม"""
-    current = "light" if st.get_option("theme.base") == "light" else "dark"
-    light = st.sidebar.toggle("Light theme", value=current == "light", key="light_theme")
-    wanted = "light" if light else "dark"
-    if wanted != current:
-        for key, value in STREAMLIT_THEMES[wanted].items():
-            st._config.set_option(f"theme.{key}", value)
-        # ธีมของ Streamlit ถูกส่งไปหน้าเว็บตอนเปิด session ใหม่ -> สั่งรีโหลดหน้าเว็บ
-        components.html("<script>window.parent.location.reload()</script>", height=0)
-        st.stop()
-    return wanted
+    """สวิตช์ธีมขาว/ดำที่ sidebar (เก็บแยกต่อหน้าต่าง)"""
+    light = st.sidebar.toggle("Light theme", key="light_theme")
+    st.session_state["kx_mode"] = "light" if light else "dark"
+    return st.session_state["kx_mode"]
+
+
+def style_chart(chart):
+    """แกน/ตัวอักษร/พื้นหลังของกราฟตามธีม — สีเส้นกำหนดไว้ที่ตัวกราฟเอง จึงเหมือนเดิมทั้งสองธีม"""
+    p = PALETTES[theme_mode()]
+    grid = "#262626" if theme_mode() == "dark" else "#e6e6e6"
+    return (
+        chart.configure(background=p["bg"], font="Inter, IBM Plex Sans Thai, sans-serif")
+        .configure_view(strokeWidth=0)
+        .configure_axis(labelColor=p["sub"], titleColor=p["sub"], gridColor=grid,
+                        domainColor=grid, tickColor=grid, labelFontSize=12, titleFontSize=12,
+                        titlePadding=12, labelPadding=6)
+        .configure_axisX(grid=False)
+        .configure_legend(labelColor=p["text"], titleColor=p["sub"], labelFontSize=13,
+                          titleFontSize=13, symbolStrokeWidth=3)
+    )
 
 
 def apply_style() -> None:
     mode = theme_toggle()
     st.markdown(_CSS_TEMPLATE.format(**PALETTES[mode]), unsafe_allow_html=True)
+    if mode == "light":
+        st.markdown(_LIGHT_EXTRA.format(**PALETTES["light"]), unsafe_allow_html=True)
 
 
 def hero(eyebrow: str, title_html: str, sub: str) -> None:

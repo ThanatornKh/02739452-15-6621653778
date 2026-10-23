@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from db import QUOTE_INFO, query, thb_per_unit, unit_label
-from style import apply_style, hero, section
+from style import apply_style, hero, section, style_chart
 
 # ล็อกสีของแต่ละเส้นให้เหมือนเดิมเสมอ ไม่ขึ้นกับธีม/ลำดับข้อมูล
 QUOTE_COLORS = alt.Scale(domain=["1 EUR", "1 USD", "1,000 KRW", "100 JPY"],
@@ -49,7 +49,7 @@ with st.sidebar:
     st.header("Filters")
     quotes = st.multiselect(
         "สกุลเงิน", list(QUOTE_INFO), default=list(QUOTE_INFO),
-        format_func=lambda q: f"{q} — {QUOTE_INFO[q]['name']}",
+        format_func=lambda q: f"{q}  ·  {QUOTE_INFO[q]['name']}",
     )
     preset = st.radio("ช่วงเวลา", ["1 เดือน", "6 เดือน", "1 ปี", "ทั้งหมด", "กำหนดเอง"],
                       index=2, horizontal=True)
@@ -131,7 +131,7 @@ else:
         .properties(height=380)
         .interactive()
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(style_chart(chart), use_container_width=True, theme=None)
 
 # ------------------ เปรียบเทียบรายแหล่ง (จากตาราง raw) ------------------
 section("03", "Source Comparison", "ราคาเดียวกันจากแต่ละแหล่ง")
@@ -148,7 +148,7 @@ if not raw.empty:
     raw["rate_date"] = pd.to_datetime(raw["rate_date"])
     raw["thb"] = thb_per_unit(raw)
     st.altair_chart(
-        alt.Chart(raw)
+        style_chart(alt.Chart(raw)
         .mark_line(point=True, strokeWidth=1.5)
         .encode(
             x=alt.X("rate_date:T", title="วันที่"),
@@ -157,8 +157,9 @@ if not raw.empty:
             tooltip=["source", alt.Tooltip("rate_date:T"), alt.Tooltip("thb:Q", format=",.4f")],
         )
         .properties(height=300)
-        .interactive(),
+        .interactive()),
         use_container_width=True,
+        theme=None,
     )
     st.caption("แสดงไม่เกิน 60 วันล่าสุดของช่วงที่เลือก (x-rates.com ดึงย้อนหลังเฉพาะช่วงสั้น)")
 
