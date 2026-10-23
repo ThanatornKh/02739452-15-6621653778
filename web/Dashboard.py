@@ -25,18 +25,36 @@ def line_chart(df, series, scale, y_title, height, split=False, points=False, fo
 
     def build(d, h, with_legend_select):
         sel = alt.selection_point(fields=[series], bind="legend")
+        # เส้นเล็ง: ชี้ตรงไหนก็จับวันที่ใกล้ที่สุด แล้วโชว์ค่าของทุกเส้นในวันนั้นในกล่องเดียว
+        hover = alt.selection_point(fields=["rate_date"], nearest=True, on="pointerover",
+                                    clear="pointerout", empty=False)
+        names = [n for n in scale.domain if n in set(d[series])]
+        keys = {n: f"s{i}" for i, n in enumerate(names)}  # ชื่อคอลัมน์ปลอดภัยสำหรับ pivot
+        d = d.assign(_key=d[series].map(keys))
         base = alt.Chart(d).encode(
             x=alt.X("rate_date:T", title="วันที่"),
             y=alt.Y("value:Q", title=y_title, scale=alt.Scale(zero=False)),
-            color=alt.Color(f"{series}:N", title="", scale=scale),
-            tooltip=[alt.Tooltip("rate_date:T", title="วันที่"),
-                     alt.Tooltip(f"{series}:N", title="ชุด"),
-                     alt.Tooltip("thb:Q", title="บาท", format=",.4f")],
+            # สัญลักษณ์ legend คงแบบเดิม (ขีดสำหรับกราฟเส้นล้วน, วงกลมสำหรับกราฟที่มีจุด)
+            color=alt.Color(f"{series}:N", title="", scale=scale,
+                            legend=alt.Legend(symbolType="circle" if points else "stroke")),
         )
         line = base.mark_line(strokeWidth=1.8, point=points)
         if with_legend_select:
             line = line.encode(opacity=alt.condition(sel, alt.value(1), alt.value(0.08))).add_params(sel)
-        layers = [line.interactive()]
+        hover_dots = base.mark_point(size=70, filled=True, stroke="white", strokeWidth=1).encode(
+            opacity=alt.condition(hover, alt.value(1), alt.value(0)))
+        crosshair = (
+            alt.Chart(d).transform_pivot("_key", value="thb", groupby=["rate_date"])
+            .mark_rule(color="#8a8a8a", strokeWidth=1)
+            .encode(
+                x="rate_date:T",
+                opacity=alt.condition(hover, alt.value(0.9), alt.value(0)),
+                tooltip=[alt.Tooltip("rate_date:T", title="วันที่", format="%d %b %Y")]
+                + [alt.Tooltip(f"{keys[n]}:Q", title=f"{n} (บาท)", format=",.4f") for n in names],
+            )
+            .add_params(hover)
+        )
+        layers = [line.interactive(), hover_dots, crosshair]
         if focus_day is not None:
             ts = pd.Timestamp(focus_day)
             rule = alt.Chart(pd.DataFrame({"rate_date": [ts]})).mark_rule(
@@ -213,7 +231,7 @@ else:
                    points=focus_day is not None, focus_day=focus_day),
         use_container_width=True, theme=None,
     )
-    st.caption("กดชื่อในคำอธิบายสีเพื่อแยกดูทีละเส้น (Shift + คลิก เลือกหลายเส้น, คลิกที่ว่างเพื่อแสดงทั้งหมด) · "
+    st.caption("ชี้เมาส์ที่กราฟเพื่อดูค่าของทุกเส้นในวันนั้น · กดชื่อในคำอธิบายสีเพื่อแยกดูทีละเส้น (Shift + คลิก เลือกหลายเส้น, คลิกที่ว่างเพื่อแสดงทั้งหมด) · "
                "ลากเพื่อเลื่อน · scroll เพื่อซูม · ดับเบิลคลิกเพื่อรีเซ็ต")
 
     if focus_day is not None:
@@ -258,7 +276,7 @@ else:
         use_container_width=True, theme=None,
     )
     st.caption(("ช่วงที่ค้นหา" if focus_label else "60 วันล่าสุดของช่วงที่เลือก")
-               + " · x-rates.com มีข้อมูลเฉพาะ 30 วันล่าสุด · กดชื่อแหล่งใน legend เพื่อแยกดูทีละเส้น")
+               + " · x-rates.com มีข้อมูลเฉพาะ 30 วันล่าสุด · ชี้เมาส์เพื่อเทียบค่าทุกแหล่งในวันนั้น · กดชื่อแหล่งใน legend เพื่อแยกดูทีละเส้น")
 
 # ---------------------------- ตาราง ----------------------------
 section("04", "Unified Dataset", "หลังรวมและตัดรายการซ้ำข้ามแหล่ง")
